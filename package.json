@@ -17,6 +17,15 @@
       ]
     }
   ],
+  "engines": [
+    {
+      "path": "engines/marginalia",
+      "name": "Marginalia",
+      "description": "Marginalia Search, the indie engine indexing the small, old and text-heavy web. Uses the official API; the shared \"public\" key rate-limits, get a personal key via contact@marginalia-search.com.",
+      "version": "1.0.0",
+      "minDegoogVersion": "1.1.0"
+    }
+  ],
   "themes": [
     {
       "path": "themes/bong",
