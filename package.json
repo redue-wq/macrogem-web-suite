@@ -24,6 +24,13 @@
       "description": "Marginalia Search, the indie engine indexing the small, old and text-heavy web. Uses the official API; the shared \"public\" key rate-limits, get a personal key via contact@marginalia-search.com.",
       "version": "1.0.0",
       "minDegoogVersion": "1.1.0"
+    },
+    {
+      "path": "engines/loc-images",
+      "name": "Library of Congress Images",
+      "description": "Historic photos, prints and drawings from the Library of Congress, through the loc.gov JSON API. Free to use, no key needed.",
+      "version": "1.0.0",
+      "minDegoogVersion": "1.1.0"
     }
   ],
   "themes": [
