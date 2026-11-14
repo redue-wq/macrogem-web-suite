@@ -1,8 +1,8 @@
 # macrogem-web-suite
 
-Community plugins and themes for [degoog](https://github.com/degoog-org/degoog) 
-
 Microsoft Parody plugins I made for fun and personal use.
+
+Community plugins and themes for [degoog](https://github.com/degoog-org/degoog) 
 
 ## Deep AI Summary — `plugins/deep-ai-summary`
 
