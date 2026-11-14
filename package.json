@@ -1,0 +1,28 @@
+{
+  "name": "macrogem-web-suite",
+  "description": "Community plugins and themes for degoog search.",
+  "repo-image": "https://avatars.githubusercontent.com/u/252056641",
+  "author": "redue-wq",
+  "plugins": [
+    {
+      "path": "plugins/deep-ai-summary",
+      "name": "Deep AI Summary",
+      "description": "AI summary panel with full-page fetching: the top results' pages are fetched server side and offered to the model as primary evidence, with per-page caps, timeouts and an optional external extractor. Forked from the official AI Summary plugin; also adds a custom panel title and max-sources setting.",
+      "version": "1.0.0",
+      "type": "slot",
+      "minDegoogVersion": "1.1.0",
+      "legacyIds": [
+        "redue-deeppy-summary-slot",
+        "deeppy-summary-slot"
+      ]
+    }
+  ],
+  "themes": [
+    {
+      "path": "themes/bong",
+      "name": "Bong",
+      "description": "Microslop implies the existence of Macrogem. Zen-based theme with a Breaking Bad homepage: green smoke background, banner logos, aligned results layout.",
+      "version": "1.0.0"
+    }
+  ]
+}
