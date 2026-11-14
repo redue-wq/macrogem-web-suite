@@ -1,6 +1,11 @@
 # Bong Theme
 
-A degoog theme based on the [zen theme](https://github.com/degoog-org/official-extensions) by fccview.
+
+<div align="center">
+    <img width="700" src="./screenshots/home.png" />
+    <img width="700" src="./screenshots/home-dark.png" />
+    <img width="700" src="./screenshots/results.png" />
+</div>
 
 - Bong banner as the homepage and results logo: `Bong3.png` everywhere; the homepage swaps to `Bong3-dark.png` (white text) in dark mode
 - Breaking Bad intro green smoke as the home-page background: `smoke-light.jpg` (inverted: olive wisps on cream, light mode), `smoke2.jpg` (pre-dimmed, dark mode); `smoke.jpg` is the untouched original

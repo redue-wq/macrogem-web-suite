@@ -5,6 +5,10 @@ An AI summary plugin for [degoog](https://github.com/degoog-org/degoog), forked
 from the official [AI Summary](https://github.com/degoog-org/official-extensions)
 plugin and rebased onto it. Same slot, same look — plus two extra features:
 
+<div align="center">
+    <img width="700" src="./screenshots/summary.png" />
+</div>
+
 1. **Full-page context** — instead of summarizing only the search snippets,
    the top result pages are fetched and their main text is given to the model
    as primary evidence, with a `--- Source [N] full text ---` block per page.
