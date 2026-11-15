@@ -122,9 +122,10 @@ const FILLER_WORDS = new Set([
   "species", "sp", "spp", "genus", "taxon",
   // Generic life-form words that often trail a taxon in casual queries
   // ("hydra animal", "python snake") but carry no matching value.
+  // Note: no "fungi" — that is also the kingdom's scientific name.
   "animal", "animals", "plant", "plants", "tree", "trees",
   "snake", "snakes", "bird", "birds", "fish", "fishes",
-  "insect", "insects", "flower", "flowers", "fungus", "fungi",
+  "insect", "insects", "flower", "flowers", "fungus",
 ]);
 
 const _normalizeTerm = (term) => {
@@ -300,6 +301,7 @@ export const slot = {
     // qualified query ("python animal", "hydra species") shows the searcher
     // wants the organism, so it gets a card.
     if (_skippedTerm(rawTerm)) return { title: "", html: "" };
+    const fillerStripped = term !== rawTerm;
 
     const fetchFn = context?.fetch || fetch;
 
@@ -316,9 +318,12 @@ export const slot = {
 
       if (!match?.synonym && match?.usageKey) {
         loose = match.matchType !== "EXACT" && match.matchType !== "VERBATIM";
-        // A HIGHERRANK fallback above genus (kingdom, phylum…) means GBIF
-        // could not really parse the name — never a useful card.
-        const tooCoarse = match.matchType === "HIGHERRANK" && match.rank !== "GENUS";
+        // A HIGHERRANK fallback above genus after filler stripping ("hydra
+        // species" → kingdom Animalia) is a parse failure — fall through to
+        // the vernacular index instead. But a higher taxon typed as-is
+        // ("animalia", "aves", "chordata") is a legitimate card.
+        const tooCoarse =
+          fillerStripped && match.matchType === "HIGHERRANK" && match.rank !== "GENUS";
         const threshold = loose ? Math.max(minConfidence, LOOSE_MIN_CONFIDENCE) : minConfidence;
         if (!tooCoarse && (match.confidence ?? 0) >= threshold) {
           key = match.usageKey;
