@@ -125,15 +125,28 @@
   opacity: 0.85;
 }
 
+/* The density overlay is a transparent PNG that must sit on a web-mercator
+   basemap, exactly like gbif.org renders it. tile.gbif.org serves matching
+   tiles: same 3857 projection, same zoom-0 extent, so the two stack 1:1. */
 .tp-map {
+  position: relative;
   width: 100%;
-  aspect-ratio: 2 / 1;
-  object-fit: cover;
-  object-position: center;
   border-radius: 8px;
-  /* The density overlay is a transparent PNG designed to sit on GBIF's light
-     basemap; without this, dark themes hide sparse occurrences. */
-  background: #f4f1e8;
+  overflow: hidden;
+  background: #8f86bd;
+}
+
+.tp-map-base {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tp-map-dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .tp-link {

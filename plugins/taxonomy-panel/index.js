@@ -257,11 +257,14 @@ export const slot = {
 
       const mapHtml =
         showMap && count > 0
-          ? `<img class="tp-map" loading="lazy" alt="GBIF occurrence density map" src="${_esc(
-              proxied(
-                `${GBIF.replace("/v1", "")}/v2/map/occurrence/density/0/0/0@2x.png?taxonKey=${key}`,
-              ),
-            )}">`
+          ? `<div class="tp-map">` +
+            `<img class="tp-map-base" loading="lazy" alt="" src="${_esc(
+              proxied("https://tile.gbif.org/3857/omt/0/0/0@2x.png?style=gbif-classic"),
+            )}">` +
+            `<img class="tp-map-dots" loading="lazy" alt="GBIF occurrence density map" src="${_esc(
+              proxied(`${GBIF.replace("/v1", "")}/v2/map/occurrence/density/0/0/0@2x.png?taxonKey=${key}`),
+            )}">` +
+            `</div>`
           : "";
 
       const photoHtml = photoUrl
