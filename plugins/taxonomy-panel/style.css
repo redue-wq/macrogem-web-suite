@@ -99,24 +99,6 @@
   color: #4c8f4c;
 }
 
-.tp-lineage {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.82rem;
-}
-
-.tp-clade {
-  padding: 0.1rem 0.45rem;
-  border-radius: 6px;
-  background: var(--bg-tertiary, rgba(127, 127, 127, 0.12));
-}
-
-.tp-arrow {
-  opacity: 0.45;
-}
-
 .tp-stats {
   display: flex;
   flex-wrap: wrap;
@@ -125,12 +107,22 @@
   opacity: 0.85;
 }
 
+/* Below the header, the range map and the taxonomy tree sit side by side
+   and wrap on narrow screens. */
+.tp-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
 /* The density overlay is a transparent PNG that must sit on a web-mercator
    basemap, exactly like gbif.org renders it. tile.gbif.org serves matching
    tiles: same 3857 projection, same zoom-0 extent, so the two stack 1:1. */
 .tp-map {
   position: relative;
-  width: 100%;
+  flex: 0 0 220px;
+  max-width: 100%;
   border-radius: 8px;
   overflow: hidden;
   background: #8f86bd;
@@ -147,6 +139,39 @@
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+/* Taxonomy tree in the GBIF catalog style: each clade indented one level,
+   its rank right-aligned, and the matched taxon highlighted. */
+.tp-tree {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: 0.85rem;
+  align-self: center;
+}
+
+.tp-tree-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  padding-left: calc(0.55rem + var(--tp-depth, 0) * 1rem);
+  border-radius: 5px;
+}
+
+.tp-tree-current {
+  background: var(--bg-tertiary, rgba(127, 127, 127, 0.14));
+}
+
+.tp-tree-name {
+  color: #699d43;
+}
+
+.tp-tree-rank {
+  opacity: 0.6;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .tp-link {

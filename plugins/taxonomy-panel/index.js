@@ -226,7 +226,8 @@ const _englishVernacular = async (fetchFn, key) => {
 
 // A candidate resolved without a v2 match (homonyms whose bare name match
 // returns NONE even though the taxon exists, e.g. class Amphibia). Verified
-// by actual occurrence data.
+// by actual occurrence data. The ChecklistBank row carries the full
+// classification chain (lowercase ranks) — normalize it for the tree view.
 const _fromCandidate = (candidate, occCount) => ({
   key: candidate.key,
   canonical: candidate.canonicalName ?? candidate.scientificName ?? "",
@@ -235,7 +236,10 @@ const _fromCandidate = (candidate, occCount) => ({
   status: candidate.taxonomicStatus ?? "ACCEPTED",
   matchType: "EXACT",
   confidence: 100,
-  classification: [],
+  classification: (candidate.classification ?? []).map((c) => ({
+    name: c.name ?? "",
+    rank: String(c.rank ?? "").toUpperCase(),
+  })),
   iucn: null,
   occCount,
 });
@@ -294,6 +298,7 @@ const _searchResolve = async (fetchFn, term, ranks) => {
                 authorship: name.authorship ?? "",
                 rank,
                 taxonomicStatus: "ACCEPTED",
+                classification: r.classification ?? [],
               },
               count,
             );
@@ -519,12 +524,6 @@ export const slot = {
       const scientific = m.canonical || term;
       const authorship = m.authorship ?? "";
       const common = commonOverride || vernacular;
-      // Keep the classic six-rank lineage display; COL XR classifies through
-      // many more intermediate ranks (subphylum, gigaclass…).
-      const LINEAGE_RANKS = ["KINGDOM", "PHYLUM", "CLASS", "ORDER", "FAMILY", "GENUS"];
-      const clades = LINEAGE_RANKS.map((r) =>
-        (m.classification ?? []).find((c) => c?.rank === r)?.name,
-      ).filter(Boolean);
 
       const count = occ?.count ?? 0;
       const countries = (occ?.facets?.[0]?.counts ?? [])
@@ -573,11 +572,28 @@ export const slot = {
           `</div>`
         : "";
 
-      const lineageHtml = clades.length
-        ? `<div class="tp-lineage">${clades
-            .map((c) => `<span class="tp-clade">${_esc(c)}</span>`)
-            .join('<span class="tp-arrow">›</span>')}</div>`
-        : "";
+      const lineageHtml = (() => {
+        // GBIF catalog-style tree: each clade indented a level, rank label
+        // right-aligned, the matched taxon highlighted.
+        const cls = (m.classification ?? []).filter((c) => c?.name);
+        if (!cls.length) return "";
+        const rows = cls
+          .map((c, i) => {
+            const current = i === cls.length - 1;
+            const rank = String(c.rank ?? "");
+            const rankLabel = rank
+              ? rank.charAt(0).toUpperCase() + rank.slice(1).toLowerCase()
+              : "";
+            return (
+              `<div class="tp-tree-row${current ? " tp-tree-current" : ""}" style="--tp-depth:${i}">` +
+              `<span class="tp-tree-name">${_esc(c.name)}</span>` +
+              (rankLabel ? `<span class="tp-tree-rank">${_esc(rankLabel)}</span>` : "") +
+              `</div>`
+            );
+          })
+          .join("");
+        return `<div class="tp-tree">${rows}</div>`;
+      })();
 
       const headHtml =
         `<div class="tp-head">` +
@@ -593,19 +609,23 @@ export const slot = {
         badge("status", m.status ? _esc(m.status.toLowerCase()) : "") +
         iucnHtml +
         `</div>` +
-        lineageHtml +
         statsHtml +
         `</div>` +
         `</div>`;
 
       const footerHtml = `<a class="tp-link" href="https://www.gbif.org/taxon/${m.key}" rel="noopener">Open on GBIF ›</a>`;
 
+      const bodyHtml =
+        mapHtml || lineageHtml
+          ? `<div class="tp-body">${mapHtml}${lineageHtml}</div>`
+          : "";
+
       const looseNote =
         m.matchType !== "EXACT" && m.matchType !== "VERBATIM"
           ? `<span class="tp-loose">probable match</span> `
           : "";
       const content =
-        `<div class="tp-card">${looseNote}${headHtml}${mapHtml}${footerHtml}</div>`;
+        `<div class="tp-card">${looseNote}${headHtml}${bodyHtml}${footerHtml}</div>`;
       return { title: common || scientific, html: _render({ content }) };
     } catch {
       return { title: "", html: "" };
