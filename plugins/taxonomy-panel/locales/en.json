@@ -9,8 +9,8 @@
         "description": "0–100. Only queries the GBIF backbone matches with at least this confidence show a card."
       },
       "skipTerms": {
-        "label": "Never show for",
-        "description": "Comma-separated words that get no card even when GBIF matches them — for names that are also common non-biology search terms, like the Python programming language."
+        "label": "Hide for bare searches",
+        "description": "Comma-separated words that get no card when searched alone, for names that are usually something else (like the Python programming language). Adding context brings the card back: \"python animal\" or \"hydra species\" still show it."
       },
       "showMap": {
         "label": "Show range map",

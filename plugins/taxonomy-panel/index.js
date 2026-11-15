@@ -241,11 +241,11 @@ export const slot = {
     },
     {
       key: "skipTerms",
-      label: "Never show for",
+      label: "Hide for bare searches",
       type: "textarea",
       default: "python, hydra",
       description:
-        "Comma-separated words that get no card even when GBIF matches them — for names that are also common non-biology search terms, like the Python programming language.",
+        "Comma-separated words that get no card when searched alone, for names that are usually something else (like the Python programming language). Adding context brings the card back: \"python animal\" or \"hydra species\" still show it.",
     },
     {
       key: "showMap",
@@ -290,12 +290,16 @@ export const slot = {
   },
 
   async execute(query, context) {
-    const term = _normalizeTerm(_parseQuery(query));
+    const rawTerm = _parseQuery(query);
+    const term = _normalizeTerm(rawTerm);
     if (!term) return { title: "", html: "" };
     // "plant species", "animal" — queries that are nothing but filler words
     // would still match a whole kingdom exactly, which is never a useful card.
     if (FILLER_WORDS.has(term.toLowerCase())) return { title: "", html: "" };
-    if (_skippedTerm(term)) return { title: "", html: "" };
+    // The skip list only suppresses the bare word ("python"); an explicitly
+    // qualified query ("python animal", "hydra species") shows the searcher
+    // wants the organism, so it gets a card.
+    if (_skippedTerm(rawTerm)) return { title: "", html: "" };
 
     const fetchFn = context?.fetch || fetch;
 
