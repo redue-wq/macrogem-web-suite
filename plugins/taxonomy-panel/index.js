@@ -188,6 +188,26 @@ const _bestPhoto = (occurrences) => {
   return licensed ? candidates[occurrences.indexOf(licensed)] ?? candidates[0] : candidates[0];
 };
 
+// GBIF returns matchType NONE when several backbone taxa share a name
+// ("Multiple equal matches") — e.g. the ant genus Solenopsis versus a
+// little-known plant genus of the same name. The clade with the most
+// descendants is almost certainly what a searcher means.
+const _disambiguate = async (fetchFn, term) => {
+  const wanted = term.toLowerCase();
+  const data = await _fetchJson(
+    fetchFn,
+    `${GBIF}/species/search?q=${encodeURIComponent(term)}&rank=GENUS&status=ACCEPTED` +
+      `&datasetKey=${BACKBONE_KEY}&limit=10`,
+  );
+  const candidates = (data?.results ?? []).filter(
+    (r) => (r.canonicalName ?? "").toLowerCase() === wanted,
+  );
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => (b.numDescendants ?? 0) - (a.numDescendants ?? 0));
+  const best = candidates[0];
+  return { key: best.key, scientificName: best.canonicalName ?? best.scientificName ?? "" };
+};
+
 // Vernacular fallback: search the backbone's common-name index and accept
 // only an exact, case-insensitive match of the whole query.
 const BACKBONE_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
@@ -318,16 +338,29 @@ export const slot = {
 
       if (!match?.synonym && match?.usageKey) {
         loose = match.matchType !== "EXACT" && match.matchType !== "VERBATIM";
-        // A HIGHERRANK fallback above genus after filler stripping ("hydra
-        // species" → kingdom Animalia) is a parse failure — fall through to
-        // the vernacular index instead. But a higher taxon typed as-is
-        // ("animalia", "aves", "chordata") is a legitimate card.
+        // A HIGHERRANK fallback above genus is a parse failure when (a) the
+        // query was reduced by filler stripping ("hydra species"), or (b)
+        // the matched taxon is not the query itself ("halcyon" → kingdom
+        // Animalia). But an explicitly typed higher taxon ("animalia",
+        // "aves", "chordata") is a legitimate card.
+        const highRank = match.matchType === "HIGHERRANK" && match.rank !== "GENUS";
         const tooCoarse =
-          fillerStripped && match.matchType === "HIGHERRANK" && match.rank !== "GENUS";
+          highRank &&
+          (fillerStripped || (match.canonicalName ?? "").toLowerCase() !== term.toLowerCase());
         const threshold = loose ? Math.max(minConfidence, LOOSE_MIN_CONFIDENCE) : minConfidence;
         if (!tooCoarse && (match.confidence ?? 0) >= threshold) {
           key = match.usageKey;
           matchCanonical = match.canonicalName ?? "";
+        }
+      }
+
+      if (!key) {
+        // Ambiguous name (several backbone taxa share it) — resolve to the
+        // largest clade before trying the vernacular index.
+        const resolved = await _disambiguate(fetchFn, term);
+        if (resolved) {
+          key = resolved.key;
+          matchCanonical = resolved.scientificName;
         }
       }
 
