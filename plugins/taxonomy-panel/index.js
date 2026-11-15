@@ -113,6 +113,30 @@ const IUCN_CATEGORY_LABELS = {
 
 const _skippedTerm = (term) => skipTerms.has(String(term).trim().toLowerCase());
 
+// Trailing taxonomic filler words ("hydra species", "python sp.") are
+// stripped before matching: GBIF reads them as rank markers and, unable to
+// parse the rest, answers with a coarse HIGHERRANK match (e.g. the whole
+// kingdom Animalia) that would otherwise pass the confidence gate.
+const FILLER_WORDS = new Set([
+  // Taxonomic filler: GBIF reads these as rank markers.
+  "species", "sp", "spp", "genus", "taxon",
+  // Generic life-form words that often trail a taxon in casual queries
+  // ("hydra animal", "python snake") but carry no matching value.
+  "animal", "animals", "plant", "plants", "tree", "trees",
+  "snake", "snakes", "bird", "birds", "fish", "fishes",
+  "insect", "insects", "flower", "flowers", "fungus", "fungi",
+]);
+
+const _normalizeTerm = (term) => {
+  let words = String(term).trim().split(/\s+/);
+  while (words.length > 1) {
+    const last = words[words.length - 1].toLowerCase().replace(/\.$/, "");
+    if (!FILLER_WORDS.has(last)) break;
+    words = words.slice(0, -1);
+  }
+  return words.join(" ");
+};
+
 const _parseQuery = (raw) => {
   const q = String(raw ?? "").trim();
   if (!q || q.startsWith("!")) return "";
@@ -266,8 +290,11 @@ export const slot = {
   },
 
   async execute(query, context) {
-    const term = _parseQuery(query);
+    const term = _normalizeTerm(_parseQuery(query));
     if (!term) return { title: "", html: "" };
+    // "plant species", "animal" — queries that are nothing but filler words
+    // would still match a whole kingdom exactly, which is never a useful card.
+    if (FILLER_WORDS.has(term.toLowerCase())) return { title: "", html: "" };
     if (_skippedTerm(term)) return { title: "", html: "" };
 
     const fetchFn = context?.fetch || fetch;
@@ -285,8 +312,11 @@ export const slot = {
 
       if (!match?.synonym && match?.usageKey) {
         loose = match.matchType !== "EXACT" && match.matchType !== "VERBATIM";
+        // A HIGHERRANK fallback above genus (kingdom, phylum…) means GBIF
+        // could not really parse the name — never a useful card.
+        const tooCoarse = match.matchType === "HIGHERRANK" && match.rank !== "GENUS";
         const threshold = loose ? Math.max(minConfidence, LOOSE_MIN_CONFIDENCE) : minConfidence;
-        if ((match.confidence ?? 0) >= threshold) {
+        if (!tooCoarse && (match.confidence ?? 0) >= threshold) {
           key = match.usageKey;
           matchCanonical = match.canonicalName ?? "";
         }
