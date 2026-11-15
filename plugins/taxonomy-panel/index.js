@@ -3,6 +3,10 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 200;
 const DEFAULT_MIN_CONFIDENCE = 90;
 const LOOSE_MIN_CONFIDENCE = 75;
+// Words that are also common non-biology search terms (programming
+// languages, brands...). A query that is exactly one of these never gets
+// a card, even when the backbone matches it perfectly.
+const DEFAULT_SKIP_TERMS = ["python", "hydra"];
 
 const apiCache = new Map();
 const cacheExpiry = new Map();
@@ -11,6 +15,7 @@ let minConfidence = DEFAULT_MIN_CONFIDENCE;
 let showMap = true;
 let showPhoto = true;
 let showStats = true;
+let skipTerms = new Set(DEFAULT_SKIP_TERMS);
 let template = "";
 
 const _cacheGet = (key) => {
@@ -58,7 +63,14 @@ const _fetchJson = async (fetchFn, url) => {
     headers: { Accept: "application/json", "User-Agent": "degoog-taxonomy-panel/1.0" },
   });
   if (!res.ok) return null;
-  const data = await res.json();
+  const text = await res.text();
+  if (!text) return null;
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
   _cacheSet(url, data);
   return data;
 };
@@ -99,6 +111,8 @@ const IUCN_CATEGORY_LABELS = {
   LOWER_RISK_CONSERVATION_DEPENDENT: "Lower Risk/conservation dependent",
 };
 
+const _skippedTerm = (term) => skipTerms.has(String(term).trim().toLowerCase());
+
 const _parseQuery = (raw) => {
   const q = String(raw ?? "").trim();
   if (!q || q.startsWith("!")) return "";
@@ -133,6 +147,55 @@ const _firstMediaUrl = (occ) => {
   return fallback;
 };
 
+// Among a few candidate occurrences, prefer a direct image file with a
+// stated license — a weak but real quality signal that avoids publisher
+// pages and unlicensed spectrograms.
+const _bestPhoto = (occurrences) => {
+  const candidates = occurrences.map(_firstMediaUrl).filter(Boolean);
+  if (candidates.length === 0) return "";
+  const licensed = occurrences.find((occ, i) => {
+    const media = occ?.media ?? [];
+    return (
+      candidates[i] &&
+      media.some((m) => m?.format?.startsWith?.("image/") && m?.license)
+    );
+  });
+  return licensed ? candidates[occurrences.indexOf(licensed)] ?? candidates[0] : candidates[0];
+};
+
+// Vernacular fallback: search the backbone's common-name index and accept
+// only an exact, case-insensitive match of the whole query.
+const BACKBONE_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
+
+const _vernacularMatch = async (fetchFn, term) => {
+  const wanted = term.toLowerCase();
+  const data = await _fetchJson(
+    fetchFn,
+    `${GBIF}/species/search?q=${encodeURIComponent(term)}&qField=VERNACULAR` +
+      `&datasetKey=${BACKBONE_KEY}&status=ACCEPTED&limit=20`,
+  );
+  const hits = [];
+  for (const r of data?.results ?? []) {
+    if (!r?.key) continue;
+    for (const v of r.vernacularNames ?? []) {
+      const name = (v?.vernacularName ?? "").toLowerCase();
+      if (name && name === wanted) {
+        hits.push({
+          key: r.key,
+          scientificName: r.canonicalName || r.scientificName || "",
+          vernacular: v.vernacularName,
+          rank: r.rank ?? "",
+        });
+        break;
+      }
+    }
+  }
+  if (hits.length === 0) return null;
+  // "gray wolf" matches both Canis lupus and C. l. familiaris — the full
+  // species is almost always what a searcher means.
+  return hits.find((h) => h.rank === "SPECIES") ?? hits[0];
+};
+
 const _render = (data) => template.replace(/\{\{(\w+)\}\}/g, (_, key) => data[key] ?? "");
 
 export const slot = {
@@ -151,6 +214,14 @@ export const slot = {
       type: "text",
       placeholder: "90",
       description: "0–100. Only queries the GBIF backbone matches with at least this confidence show a card.",
+    },
+    {
+      key: "skipTerms",
+      label: "Never show for",
+      type: "textarea",
+      default: "python, hydra",
+      description:
+        "Comma-separated words that get no card even when GBIF matches them — for names that are also common non-biology search terms, like the Python programming language.",
     },
     {
       key: "showMap",
@@ -182,6 +253,12 @@ export const slot = {
     showMap = settings?.showMap !== "false";
     showStats = settings?.showStats !== "false";
     showPhoto = settings?.showPhoto !== "false";
+    skipTerms = new Set(
+      String(settings?.skipTerms ?? DEFAULT_SKIP_TERMS.join(", "))
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    );
   },
 
   trigger(query) {
@@ -191,6 +268,7 @@ export const slot = {
   async execute(query, context) {
     const term = _parseQuery(query);
     if (!term) return { title: "", html: "" };
+    if (_skippedTerm(term)) return { title: "", html: "" };
 
     const fetchFn = context?.fetch || fetch;
 
@@ -199,13 +277,33 @@ export const slot = {
         fetchFn,
         `${GBIF}/species/match?name=${encodeURIComponent(term)}&strict=false`,
       );
-      if (!match?.usageKey || match.synonym) return { title: "", html: "" };
 
-      const loose = match.matchType !== "EXACT" && match.matchType !== "VERBATIM";
-      const threshold = loose ? Math.max(minConfidence, LOOSE_MIN_CONFIDENCE) : minConfidence;
-      if ((match.confidence ?? 0) < threshold) return { title: "", html: "" };
+      let key = "";
+      let matchCanonical = "";
+      let loose = false;
+      let commonOverride = "";
 
-      const key = match.usageKey;
+      if (!match?.synonym && match?.usageKey) {
+        loose = match.matchType !== "EXACT" && match.matchType !== "VERBATIM";
+        const threshold = loose ? Math.max(minConfidence, LOOSE_MIN_CONFIDENCE) : minConfidence;
+        if ((match.confidence ?? 0) >= threshold) {
+          key = match.usageKey;
+          matchCanonical = match.canonicalName ?? "";
+        }
+      }
+
+      if (!key) {
+        // Scientific match failed (or was too fuzzy) — try the vernacular
+        // name index, so queries like "grizzly bear" still get a card.
+        // Only exact common-name hits count; partial phrases ("grizzly
+        // bear prickly-pear cactus") are ignored.
+        const found = await _vernacularMatch(fetchFn, term);
+        if (!found) return { title: "", html: "" };
+        key = found.key;
+        matchCanonical = found.scientificName;
+        commonOverride = found.vernacular;
+      }
+
       const [record, iucn, occ, photo] = await Promise.all([
         _fetchJson(fetchFn, `${GBIF}/species/${key}`),
         _fetchJson(fetchFn, `${GBIF}/species/${key}/iucnRedListCategory`),
@@ -216,15 +314,15 @@ export const slot = {
         showPhoto
           ? _fetchJson(
               fetchFn,
-              `${GBIF}/occurrence/search?taxonKey=${key}&mediaType=stillImage&limit=1`,
+              `${GBIF}/occurrence/search?taxonKey=${key}&mediaType=stillImage&limit=5`,
             )
           : Promise.resolve(null),
       ]);
 
       const usage = record ?? {};
-      const scientific = usage.canonicalName || match.canonicalName || usage.scientificName || term;
+      const scientific = usage.canonicalName || matchCanonical || usage.scientificName || term;
       const authorship = usage.authorship ?? "";
-      const common = _commonName(record, match);
+      const common = commonOverride || _commonName(record, match);
       const clades = [
         usage.kingdom,
         usage.phylum,
@@ -240,7 +338,7 @@ export const slot = {
         .map((f) => _esc(f.name))
         .join(", ");
       const lastSeen = occ?.results?.[0]?.eventDate ?? "";
-      const photoUrl = showPhoto ? _firstMediaUrl(photo?.results?.[0]) : "";
+      const photoUrl = showPhoto ? _bestPhoto(photo?.results ?? []) : "";
 
       const proxied = (url) =>
         url && context?.signProxyUrl ? context.signProxyUrl(url) : url;

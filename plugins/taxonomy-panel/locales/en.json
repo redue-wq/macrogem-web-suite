@@ -8,6 +8,10 @@
         "placeholder": "90",
         "description": "0–100. Only queries the GBIF backbone matches with at least this confidence show a card."
       },
+      "skipTerms": {
+        "label": "Never show for",
+        "description": "Comma-separated words that get no card even when GBIF matches them — for names that are also common non-biology search terms, like the Python programming language."
+      },
       "showMap": {
         "label": "Show range map",
         "description": "Include GBIF's occurrence density map in the card."
