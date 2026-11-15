@@ -1,5 +1,5 @@
 import { SETTINGS_SCHEMA } from "./settings.js";
-import { HEADERS } from "./const/gbif.js";
+import { HEADERS, API_URL } from "./const/gbif.js";
 import { buildResolveUrl, buildSearchUrl } from "./request.js";
 import { parseResults } from "./parse.js";
 
@@ -22,17 +22,19 @@ export default class GbifImagesEngine {
 
   // Resolve a common name to a usage key through the backbone's vernacular
   // index, same approach as the taxonomy panel: the vernacular name must
-  // equal the query ("cat" -> Felis, "red fox" -> Vulpes vulpes). Modifier
-  // compounds ("Fox's Shrew" for "fox") don't qualify; when nothing equals
-  // the query the engine falls back to the text search with a relevance
-  // filter instead of guessing a taxon.
-  static _pick(results, query) {
+  // equal the query ("cat" -> Felis, "grey wolf" -> Canis lupus). Modifier
+  // compounds ("Fox's Shrew" for "fox") don't qualify. Equal candidates are
+  // ranked by how many image-bearing occurrences actually sit behind them —
+  // GBIF carries mislabelled vernaculars ("Dog" -> coyote), and a taxon
+  // without imagery is worthless to an image engine. No exact match -> null,
+  // which falls back to the text search with a relevance filter.
+  static _exact(results, query) {
     const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return null;
-    let best = null;
-    let bestScore = 0;
+    if (tokens.length === 0) return [];
+    const out = [];
+    const seen = new Set();
     for (const r of results ?? []) {
-      if (!r?.key) continue;
+      if (!r?.key || seen.has(r.key)) continue;
       for (const v of r.vernacularNames ?? []) {
         const words = String(v?.vernacularName ?? "")
           .toLowerCase()
@@ -40,17 +42,12 @@ export default class GbifImagesEngine {
           .filter(Boolean);
         if (words.length !== tokens.length) continue;
         if (!tokens.every((t, i) => words[i] === t)) continue;
-        // For imagery a genus-level vernacular match ("Fox" -> Vulpes) is
-        // the safer bet: species-epithet coincidences ("Fox's Shrew") rank
-        // below it, and the occurrence search covers all descendants.
-        const rankBonus = r.rank === "GENUS" ? 3 : r.rank === "SPECIES" ? 2 : 1;
-        if (rankBonus > bestScore || !best) {
-          bestScore = rankBonus;
-          best = r;
-        }
+        out.push({ key: r.key, rank: r.rank, name: r.canonicalName ?? r.scientificName ?? "" });
+        seen.add(r.key);
+        break;
       }
     }
-    return best?.key ?? null;
+    return out;
   }
 
   async _resolveTaxon(query, doFetch) {
@@ -58,7 +55,32 @@ export default class GbifImagesEngine {
     let verdict = null;
     try {
       const res = await doFetch(buildResolveUrl(query), { headers: HEADERS });
-      verdict = GbifImagesEngine._pick((await res.json())?.results, query);
+      const candidates = GbifImagesEngine._exact((await res.json())?.results, query).slice(0, 5);
+      const scored = await Promise.all(
+        candidates.map(async (c) => {
+          try {
+            const r = await doFetch(`${API_URL}?taxonKey=${c.key}&mediaType=stillImage&limit=0`, {
+              headers: HEADERS,
+            });
+            return { ...c, count: (await r.json())?.count ?? 0 };
+          } catch {
+            return { ...c, count: 0 };
+          }
+        }),
+      );
+      scored.sort((a, b) => b.count - a.count);
+      // A broader-rank candidate (Canis 146k images) usually wins on raw
+      // count, but swallows its children (coyotes in "dog" results). Prefer
+      // a species-level candidate when its imagery isn't a rounding error.
+      const _specific = (c) => ["SPECIES", "SUBSPECIES", "VARIETY", "FORM"].includes(c.rank);
+      const broad = scored.find((c) => !_specific(c));
+      const specific = scored
+        .filter(_specific)
+        .find((c) => c.count >= Math.max(50, 0.05 * (broad?.count ?? 0)));
+      const best = specific ?? scored[0];
+      if (best?.count > 0) {
+        verdict = { key: best.key, domestic: /\bfamiliaris\b/i.test(best.name) };
+      }
     } catch {
       // resolution is best-effort; fall back to text search
     }
@@ -73,12 +95,12 @@ export default class GbifImagesEngine {
     const doFetch = context?.fetch ?? fetch;
 
     try {
-      const taxonKey = await this._resolveTaxon(q, doFetch);
-      const response = await doFetch(buildSearchUrl(q, page, this.recordType, taxonKey), {
+      const resolved = await this._resolveTaxon(q, doFetch);
+      const response = await doFetch(buildSearchUrl(q, page, this.recordType, resolved?.key), {
         headers: HEADERS,
       });
       context?.sentinel?.(response, this.name);
-      return parseResults(await response.json(), this.name, taxonKey ? "" : q);
+      return parseResults(await response.json(), this.name, resolved ? "" : q, resolved);
     } catch (e) {
       if (e?.name === "SentinelBreach") throw e;
       return [];

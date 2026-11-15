@@ -43,7 +43,7 @@ const _snippet = (item) => {
   return parts.join(" · ");
 };
 
-export const parseResults = (data, source, query) =>
+export const parseResults = (data, source, query, resolved) =>
   (data?.results ?? [])
     .map((item) => {
       const media = mediaUrls(item);
@@ -67,8 +67,31 @@ export const parseResults = (data, source, query) =>
       };
     })
     .filter((r) => r && r.thumbnail && r.url)
+    .filter((r) => _notDomestic(r._item, resolved))
     .filter((r) => _nameRelevant(query, r._item))
+    .sort((a, b) => _prettyHost(b._item) - _prettyHost(a._item))
     .map(({ _item, ...r }) => r);
+
+// GBIF's backbone nests the domestic dog inside the wolf (Canis
+// familiaris under Canis lupus), so a "grey wolf" search is ~70% dogs.
+// Skip familiaris occurrences — unless the query itself resolved to the
+// dog ("dog" -> its own taxon).
+const _notDomestic = (item, resolved) => {
+  if (!/\bfamiliaris\b/i.test(item?.scientificName ?? "")) return true;
+  return resolved?.domestic === true;
+};
+
+// GBIF ingests community photos (iNaturalist, Flickr) alongside camera-trap
+// and museum media; no quality signal exists on the API, but the media host
+// is a good proxy. Community-hosted images first, research media after.
+const _prettyHost = (item) => {
+  const urls = [
+    ...(item?.media ?? []).map((m) => m?.identifier ?? ""),
+    ...(item?.extensions?.["http://rs.tdwg.org/ac/terms/Multimedia"] ?? [])
+      .map((m) => m?.["http://rs.tdwg.org/ac/terms/accessURI"] ?? m?.["http://purl.org/dc/terms/identifier"] ?? ""),
+  ];
+  return urls.some((u) => /inaturalist|staticflickr|flickr\.com|wikimedia/i.test(u)) ? 1 : 0;
+};
 
 // For text-search fallbacks (no taxon resolved): drop occurrences whose name
 // only matches through the author abbreviation ("Cat." of Knautia

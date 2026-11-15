@@ -6,7 +6,7 @@ export const SPECIES_API_URL = "https://api.gbif.org/v1/species/search";
 // backbone's vernacular index first — same approach as the taxonomy panel.
 export const BACKBONE_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
 
-export const PAGE_SIZE = 20;
+export const PAGE_SIZE = 50;
 
 export const HEADERS = {
   "User-Agent": "degoog/1.0 (+https://github.com/redue-wq/macrogem-web-suite)",
