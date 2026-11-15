@@ -1,4 +1,4 @@
-.sp-result {
+.tp-result {
   padding: 0;
   max-width: 100%;
   width: 100%;
@@ -6,7 +6,7 @@
   min-width: 0;
 }
 
-.sp-card {
+.tp-card {
   border: 1px solid var(--border-color, var(--border));
   border-radius: 10px;
   padding: 1rem 1.15rem;
@@ -16,24 +16,24 @@
   gap: 0.75rem;
 }
 
-.sp-loose {
+.tp-loose {
   font-size: 0.75rem;
   opacity: 0.7;
 }
 
-.sp-head {
+.tp-head {
   display: flex;
   gap: 1rem;
   min-width: 0;
 }
 
-.sp-photo-box {
+.tp-photo-box {
   flex: 0 0 auto;
   width: 130px;
   align-self: flex-start;
 }
 
-.sp-photo {
+.tp-photo {
   width: 130px;
   height: 130px;
   object-fit: cover;
@@ -41,38 +41,38 @@
   display: block;
 }
 
-.sp-head-meta {
+.tp-head-meta {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.sp-name {
+.tp-name {
   font-size: 1.05rem;
   line-height: 1.35;
 }
 
-.sp-common {
+.tp-common {
   font-weight: 600;
 }
 
-.sp-scientific {
+.tp-scientific {
   font-style: italic;
 }
 
-.sp-authorship {
+.tp-authorship {
   opacity: 0.65;
   font-size: 0.85rem;
 }
 
-.sp-badges {
+.tp-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
 }
 
-.sp-badge {
+.tp-badge {
   font-size: 0.72rem;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
@@ -80,26 +80,26 @@
   opacity: 0.85;
 }
 
-.sp-badge--iucn--ex,
-.sp-badge--iucn--ew,
-.sp-badge--iucn--cr,
-.sp-badge--iucn--en {
+.tp-badge--iucn--ex,
+.tp-badge--iucn--ew,
+.tp-badge--iucn--cr,
+.tp-badge--iucn--en {
   border-color: #b34747;
   color: #b34747;
 }
 
-.sp-badge--iucn--vu,
-.sp-badge--iucn--nt {
+.tp-badge--iucn--vu,
+.tp-badge--iucn--nt {
   border-color: #b37d2e;
   color: #b37d2e;
 }
 
-.sp-badge--iucn--lc {
+.tp-badge--iucn--lc {
   border-color: #4c8f4c;
   color: #4c8f4c;
 }
 
-.sp-lineage {
+.tp-lineage {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -107,17 +107,17 @@
   font-size: 0.82rem;
 }
 
-.sp-clade {
+.tp-clade {
   padding: 0.1rem 0.45rem;
   border-radius: 6px;
   background: var(--bg-tertiary, rgba(127, 127, 127, 0.12));
 }
 
-.sp-arrow {
+.tp-arrow {
   opacity: 0.45;
 }
 
-.sp-stats {
+.tp-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 1rem;
@@ -125,14 +125,18 @@
   opacity: 0.85;
 }
 
-.sp-map {
+.tp-map {
   width: 100%;
-  max-height: 220px;
-  object-fit: contain;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+  object-position: center;
   border-radius: 8px;
+  /* The density overlay is a transparent PNG designed to sit on GBIF's light
+     basemap; without this, dark themes hide sparse occurrences. */
+  background: #f4f1e8;
 }
 
-.sp-link {
+.tp-link {
   font-size: 0.85rem;
   align-self: flex-start;
 }

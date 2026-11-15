@@ -55,7 +55,7 @@ const _fetchJson = async (fetchFn, url) => {
   const cached = _cacheGet(url);
   if (cached != null) return cached;
   const res = await fetchFn(url, {
-    headers: { Accept: "application/json", "User-Agent": "degoog-species-panel/1.0" },
+    headers: { Accept: "application/json", "User-Agent": "degoog-taxonomy-panel/1.0" },
   });
   if (!res.ok) return null;
   const data = await res.json();
@@ -115,24 +115,30 @@ const _commonName = (record, usage) => {
 };
 
 const _firstMediaUrl = (occ) => {
+  const jpg = (u) => /\.(jpe?g|png|webp)(\?|$)/i.test(u);
+  let fallback = "";
   for (const m of occ?.media ?? []) {
-    if (m?.identifier) return String(m.identifier);
+    if (!m?.identifier) continue;
+    const url = String(m.identifier);
+    if (jpg(url)) return url;
+    if (!fallback) fallback = url;
   }
   const ext = occ?.extensions?.["http://rs.tdwg.org/ac/terms/Multimedia"] ?? [];
   for (const m of ext) {
     const uri =
       m?.["http://rs.tdwg.org/ac/terms/accessURI"] ?? m?.["http://purl.org/dc/terms/identifier"];
-    if (uri) return String(uri);
+    if (uri && jpg(String(uri))) return String(uri);
+    if (uri && !fallback) fallback = String(uri);
   }
-  return "";
+  return fallback;
 };
 
 const _render = (data) => template.replace(/\{\{(\w+)\}\}/g, (_, key) => data[key] ?? "");
 
 export const slot = {
   isClientExposed: false,
-  id: "species-panel",
-  name: "Species Panel",
+  id: "taxonomy-panel",
+  name: "Taxonomy Panel",
   position: "above-results",
   waitForResults: false,
   description:
@@ -240,7 +246,7 @@ export const slot = {
         url && context?.signProxyUrl ? context.signProxyUrl(url) : url;
 
       const badge = (cls, text) =>
-        text ? `<span class="sp-badge sp-badge--${cls}">${_esc(text)}</span>` : "";
+        text ? `<span class="tp-badge tp-badge--${cls}">${_esc(text)}</span>` : "";
 
       const iucnCode = iucn?.code ?? "";
       const iucnLabel =
@@ -251,7 +257,7 @@ export const slot = {
 
       const mapHtml =
         showMap && count > 0
-          ? `<img class="sp-map" loading="lazy" alt="GBIF occurrence density map" src="${_esc(
+          ? `<img class="tp-map" loading="lazy" alt="GBIF occurrence density map" src="${_esc(
               proxied(
                 `${GBIF.replace("/v1", "")}/v2/map/occurrence/density/0/0/0@2x.png?taxonKey=${key}`,
               ),
@@ -259,11 +265,11 @@ export const slot = {
           : "";
 
       const photoHtml = photoUrl
-        ? `<img class="sp-photo" loading="lazy" alt="" src="${_esc(proxied(photoUrl))}">`
+        ? `<img class="tp-photo" loading="lazy" alt="" src="${_esc(proxied(photoUrl))}">`
         : "";
 
       const statsHtml = showStats
-        ? `<div class="sp-stats">` +
+        ? `<div class="tp-stats">` +
           `<span><strong>${_formatCount(count)}</strong> occurrences</span>` +
           (countries ? `<span>${countries}</span>` : "") +
           (lastSeen ? `<span>last recorded ${_esc(String(lastSeen).slice(0, 10))}</span>` : "") +
@@ -271,21 +277,21 @@ export const slot = {
         : "";
 
       const lineageHtml = clades.length
-        ? `<div class="sp-lineage">${clades
-            .map((c) => `<span class="sp-clade">${_esc(c)}</span>`)
-            .join('<span class="sp-arrow">›</span>')}</div>`
+        ? `<div class="tp-lineage">${clades
+            .map((c) => `<span class="tp-clade">${_esc(c)}</span>`)
+            .join('<span class="tp-arrow">›</span>')}</div>`
         : "";
 
       const headHtml =
-        `<div class="sp-head">` +
-        (photoHtml ? `<div class="sp-photo-box">${photoHtml}</div>` : "") +
-        `<div class="sp-head-meta">` +
-        `<div class="sp-name">` +
-        (common ? `<span class="sp-common">${_esc(common)}</span> ` : "") +
-        `<span class="sp-scientific"><em>${_esc(scientific)}</em></span>` +
-        (authorship ? ` <span class="sp-authorship">${_esc(authorship)}</span>` : "") +
+        `<div class="tp-head">` +
+        (photoHtml ? `<div class="tp-photo-box">${photoHtml}</div>` : "") +
+        `<div class="tp-head-meta">` +
+        `<div class="tp-name">` +
+        (common ? `<span class="tp-common">${_esc(common)}</span> ` : "") +
+        `<span class="tp-scientific"><em>${_esc(scientific)}</em></span>` +
+        (authorship ? ` <span class="tp-authorship">${_esc(authorship)}</span>` : "") +
         `</div>` +
-        `<div class="sp-badges">` +
+        `<div class="tp-badges">` +
         badge("rank", _esc((usage.rank ?? match.rank ?? "").toLowerCase())) +
         badge("status", usage.taxonomicStatus ? _esc(usage.taxonomicStatus.toLowerCase()) : "") +
         iucnHtml +
@@ -295,12 +301,12 @@ export const slot = {
         `</div>` +
         `</div>`;
 
-      const footerHtml = `<a class="sp-link" href="https://www.gbif.org/species/${key}" rel="noopener">Open on GBIF ›</a>`;
+      const footerHtml = `<a class="tp-link" href="https://www.gbif.org/species/${key}" rel="noopener">Open on GBIF ›</a>`;
 
-      const looseNote = loose ? `<span class="sp-loose">probable match</span> ` : "";
+      const looseNote = loose ? `<span class="tp-loose">probable match</span> ` : "";
       const content =
-        `<div class="sp-card">${looseNote}${headHtml}${mapHtml}${footerHtml}</div>`;
-      return { title: "GBIF · Species", html: _render({ content }) };
+        `<div class="tp-card">${looseNote}${headHtml}${mapHtml}${footerHtml}</div>`;
+      return { title: common || scientific, html: _render({ content }) };
     } catch {
       return { title: "", html: "" };
     }

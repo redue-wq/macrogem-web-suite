@@ -17,9 +17,9 @@
       ]
     },
     {
-      "path": "plugins/species-panel",
-      "name": "Species Panel",
-      "description": "When a search query is a species or other taxon name, shows a GBIF card above results with the full classification tree, IUCN status, occurrence stats and a range map.",
+      "path": "plugins/taxonomy-panel",
+      "name": "Taxonomy Panel",
+      "description": "When a search query matches a taxon in the GBIF backbone, shows a card above results with the full classification tree, IUCN status, occurrence stats and a range map.",
       "version": "1.0.0",
       "minDegoogVersion": "1.1.0"
     }
