@@ -15,6 +15,13 @@
         "redue-deeppy-summary-slot",
         "deeppy-summary-slot"
       ]
+    },
+    {
+      "path": "plugins/species-panel",
+      "name": "Species Panel",
+      "description": "When a search query is a species or other taxon name, shows a GBIF card above results with the full classification tree, IUCN status, occurrence stats and a range map.",
+      "version": "1.0.0",
+      "minDegoogVersion": "1.1.0"
     }
   ],
   "engines": [
@@ -22,6 +29,13 @@
       "path": "engines/marginalia",
       "name": "Marginalia",
       "description": "Marginalia Search, the indie engine indexing the small, old and text-heavy web. Uses the official API; the shared \"public\" key rate-limits, get a personal key via contact@marginalia-search.com.",
+      "version": "1.0.0",
+      "minDegoogVersion": "1.1.0"
+    },
+    {
+      "path": "engines/gbif-images",
+      "name": "GBIF",
+      "description": "Photos of life on Earth from the Global Biodiversity Information Facility: field observations, herbarium sheets, museum specimens and fossils, through the official GBIF API. No key needed.",
       "version": "1.0.0",
       "minDegoogVersion": "1.1.0"
     }

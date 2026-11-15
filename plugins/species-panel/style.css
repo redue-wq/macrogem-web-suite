@@ -1,0 +1,138 @@
+.sp-result {
+  padding: 0;
+  max-width: 100%;
+  width: 100%;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.sp-card {
+  border: 1px solid var(--border-color, var(--border));
+  border-radius: 10px;
+  padding: 1rem 1.15rem;
+  background: var(--bg-secondary, var(--bg-2));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sp-loose {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.sp-head {
+  display: flex;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.sp-photo-box {
+  flex: 0 0 auto;
+  width: 130px;
+  align-self: flex-start;
+}
+
+.sp-photo {
+  width: 130px;
+  height: 130px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+.sp-head-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sp-name {
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.sp-common {
+  font-weight: 600;
+}
+
+.sp-scientific {
+  font-style: italic;
+}
+
+.sp-authorship {
+  opacity: 0.65;
+  font-size: 0.85rem;
+}
+
+.sp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.sp-badge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-color, var(--border));
+  opacity: 0.85;
+}
+
+.sp-badge--iucn--ex,
+.sp-badge--iucn--ew,
+.sp-badge--iucn--cr,
+.sp-badge--iucn--en {
+  border-color: #b34747;
+  color: #b34747;
+}
+
+.sp-badge--iucn--vu,
+.sp-badge--iucn--nt {
+  border-color: #b37d2e;
+  color: #b37d2e;
+}
+
+.sp-badge--iucn--lc {
+  border-color: #4c8f4c;
+  color: #4c8f4c;
+}
+
+.sp-lineage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.sp-clade {
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  background: var(--bg-tertiary, rgba(127, 127, 127, 0.12));
+}
+
+.sp-arrow {
+  opacity: 0.45;
+}
+
+.sp-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.sp-map {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.sp-link {
+  font-size: 0.85rem;
+  align-self: flex-start;
+}

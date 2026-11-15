@@ -1,0 +1,25 @@
+{
+  "species-panel": {
+    "name": "Species Panel",
+    "description": "When a search query is a species or other taxon name, shows a GBIF card above results with the full classification tree, IUCN status, occurrence stats and a range map.",
+    "settings": {
+      "minConfidence": {
+        "label": "Match confidence",
+        "placeholder": "90",
+        "description": "0–100. Only queries the GBIF backbone matches with at least this confidence show a card."
+      },
+      "showMap": {
+        "label": "Show range map",
+        "description": "Include GBIF's occurrence density map in the card."
+      },
+      "showStats": {
+        "label": "Show occurrence stats",
+        "description": "Occurrence count, top countries and last recorded date."
+      },
+      "showPhoto": {
+        "label": "Show representative photo",
+        "description": "One occurrence photo of the taxon in the card header."
+      }
+    }
+  }
+}
