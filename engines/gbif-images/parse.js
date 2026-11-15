@@ -43,7 +43,7 @@ const _snippet = (item) => {
   return parts.join(" · ");
 };
 
-export const parseResults = (data, source) =>
+export const parseResults = (data, source, query) =>
   (data?.results ?? [])
     .map((item) => {
       const media = mediaUrls(item);
@@ -63,6 +63,28 @@ export const parseResults = (data, source) =>
         source,
         thumbnail: usable.url,
         imageUrl: usable.url,
+        _item: item,
       };
     })
-    .filter((r) => r && r.thumbnail && r.url);
+    .filter((r) => r && r.thumbnail && r.url)
+    .filter((r) => _nameRelevant(query, r._item))
+    .map(({ _item, ...r }) => r);
+
+// For text-search fallbacks (no taxon resolved): drop occurrences whose name
+// only matches through the author abbreviation ("Cat." of Knautia
+// subcanescens Cat.) by requiring a query token to word-hit the genus,
+// epithet or vernacular name.
+const _nameRelevant = (query, item) => {
+  const tokens = String(query || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+  if (tokens.length === 0) return true;
+  const words = `${item?.genericName ?? item?.genus ?? ""} ${item?.specificEpithet ?? ""} ${item?.vernacularName ?? ""}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return tokens.some((t) =>
+    words.some((w) => w.startsWith(t) || (t.length >= 3 && t.startsWith(w))),
+  );
+};

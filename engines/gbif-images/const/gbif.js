@@ -1,10 +1,10 @@
 export const API_URL = "https://api.gbif.org/v1/occurrence/search";
+export const SPECIES_API_URL = "https://api.gbif.org/v1/species/search";
 
-// Catalogue of Life eXtended Release — GBIF's primary taxonomy since June
-// 2026. Occurrence results then carry COL classifications (the legacy
-// backbone is frozen at 2023 and missing intermediate ranks like the fish
-// higher taxa).
-export const COL_XR_KEY = "7ddf754f-d193-4cc9-b351-99906754a03b";
+// GBIF's occurrence q= search matches author abbreviations ("Cat." of
+// Knautia subcanescens Cat.), so common-name queries resolve through the
+// backbone's vernacular index first — same approach as the taxonomy panel.
+export const BACKBONE_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
 
 export const PAGE_SIZE = 20;
 
