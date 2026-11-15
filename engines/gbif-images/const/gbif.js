@@ -1,5 +1,11 @@
 export const API_URL = "https://api.gbif.org/v1/occurrence/search";
 
+// Catalogue of Life eXtended Release — GBIF's primary taxonomy since June
+// 2026. Occurrence results then carry COL classifications (the legacy
+// backbone is frozen at 2023 and missing intermediate ranks like the fish
+// higher taxa).
+export const COL_XR_KEY = "7ddf754f-d193-4cc9-b351-99906754a03b";
+
 export const PAGE_SIZE = 20;
 
 export const HEADERS = {

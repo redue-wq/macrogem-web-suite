@@ -1,12 +1,21 @@
 const GBIF = "https://api.gbif.org/v1";
+const GBIF_V2 = "https://api.gbif.org/v2";
+// Catalogue of Life eXtended Release — GBIF's primary taxonomy since June
+// 2026. The legacy GBIF backbone (d7dddbf4-…) is frozen at 2023 and cannot
+// represent intermediate ranks, which is why fish higher taxa (Osteichthyes,
+// Actinopterygii…) vanished from it. COL XR has them as gigaclass/parvphylum.
+const COL_KEY = "7ddf754f-d193-4cc9-b351-99906754a03b";
+// ChecklistBank's key for the COL XR release GBIF mirrors; used only to look
+// up per-taxon vernacular names. CoL taxon IDs are stable across releases.
+const CLB_COL_KEY = "315192";
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 200;
 const DEFAULT_MIN_CONFIDENCE = 90;
 const LOOSE_MIN_CONFIDENCE = 75;
 // Words that are also common non-biology search terms (programming
 // languages, brands...). A query that is exactly one of these never gets
-// a card, even when the backbone matches it perfectly.
-const DEFAULT_SKIP_TERMS = ["python", "hydra"];
+// a card, even when GBIF matches it perfectly.
+const DEFAULT_SKIP_TERMS = ["python", "hydra", "corona"];
 
 const apiCache = new Map();
 const cacheExpiry = new Map();
@@ -96,21 +105,6 @@ const IUCN_LABELS = {
   NE: "Not Evaluated",
 };
 
-const IUCN_CATEGORY_LABELS = {
-  EXINCT: "Extinct",
-  EXTINCT: "Extinct",
-  EXTINCT_IN_THE_WILD: "Extinct in the Wild",
-  CRITICALLY_ENDANGERED: "Critically Endangered",
-  ENDANGERED: "Endangered",
-  VULNERABLE: "Vulnerable",
-  NEAR_THREATENED: "Near Threatened",
-  LEAST_CONCERN: "Least Concern",
-  DATA_DEFICIENT: "Data Deficient",
-  NOT_EVALUATED: "Not Evaluated",
-  LOWER_RISK_NEAR_THREATENED: "Lower Risk/near threatened",
-  LOWER_RISK_CONSERVATION_DEPENDENT: "Lower Risk/conservation dependent",
-};
-
 const _skippedTerm = (term) => skipTerms.has(String(term).trim().toLowerCase());
 
 // Trailing taxonomic filler words ("hydra species", "python sp.") are
@@ -145,12 +139,6 @@ const _parseQuery = (raw) => {
   const words = q.split(/\s+/);
   if (words.length > 6 || q.length > 80 || /https?:\/\//i.test(q)) return "";
   return q;
-};
-
-const _commonName = (record, usage) => {
-  const names = record?.vernacularNames ?? [];
-  const english = names.find((v) => (v.language ?? "").toLowerCase() === "en");
-  return english?.vernacularName ?? usage?.vernacularName ?? "";
 };
 
 const _firstMediaUrl = (occ) => {
@@ -188,57 +176,195 @@ const _bestPhoto = (occurrences) => {
   return licensed ? candidates[occurrences.indexOf(licensed)] ?? candidates[0] : candidates[0];
 };
 
-// GBIF returns matchType NONE when several backbone taxa share a name
-// ("Multiple equal matches") — e.g. the ant genus Solenopsis versus a
-// little-known plant genus of the same name. The clade with the most
-// descendants is almost certainly what a searcher means.
-const _disambiguate = async (fetchFn, term) => {
-  const wanted = term.toLowerCase();
-  const data = await _fetchJson(
+// Match a scientific name against the Catalogue of Life eXtended Release.
+// The v2 match response carries everything the card needs in one call:
+// usage (canonical name, authorship, rank), the full classification
+// (including intermediate ranks), match diagnostics, and the IUCN category
+// relayed from the IUCN checklist via additionalStatus.
+const _match = async (fetchFn, name) => {
+  const m = await _fetchJson(
     fetchFn,
-    `${GBIF}/species/search?q=${encodeURIComponent(term)}&rank=GENUS&status=ACCEPTED` +
-      `&datasetKey=${BACKBONE_KEY}&limit=10`,
+    `${GBIF_V2}/species/match?scientificName=${encodeURIComponent(name)}&checklistKey=${COL_KEY}`,
   );
-  const candidates = (data?.results ?? []).filter(
-    (r) => (r.canonicalName ?? "").toLowerCase() === wanted,
-  );
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => (b.numDescendants ?? 0) - (a.numDescendants ?? 0));
-  const best = candidates[0];
-  return { key: best.key, scientificName: best.canonicalName ?? best.scientificName ?? "" };
+  if (!m || m.synonym) return null;
+  const u = m.usage;
+  if (!u?.key) return null;
+  const d = m.diagnostics ?? {};
+  const iucn = (m.additionalStatus ?? []).find((s) => s.datasetAlias === "IUCN") ?? null;
+  return {
+    key: u.key,
+    canonical: u.canonicalName ?? u.name ?? "",
+    authorship: u.authorship ?? "",
+    rank: u.rank ?? "",
+    status: u.status ?? "",
+    matchType: d.matchType ?? "",
+    confidence: d.confidence ?? 0,
+    classification: m.classification ?? [],
+    iucn,
+  };
 };
 
-// Vernacular fallback: search the backbone's common-name index and accept
-// only an exact, case-insensitive match of the whole query.
+// English common name for a usage, straight from ChecklistBank. Only needed
+// for direct scientific matches; vernacular-resolved queries already carry
+// the name the searcher typed.
+const _englishVernacular = async (fetchFn, key) => {
+  const list = await _fetchJson(
+    fetchFn,
+    `https://api.checklistbank.org/dataset/${CLB_COL_KEY}/taxon/${key}/vernacular`,
+  );
+  if (!Array.isArray(list)) return "";
+  const eng = list.find((v) =>
+    ["en", "eng"].includes(String(v?.language ?? "").toLowerCase()),
+  );
+  return eng?.name ?? "";
+};
+
+// COL XR duplicates every usage once per integrated source, and occurrence
+// data is only linked to the subset of usages GBIF matches records against
+// (the keys v2/match returns — search result keys often have 0 occurrences).
+// So every resolution path must end in a v2 match.
+
+// A candidate resolved without a v2 match (homonyms whose bare name match
+// returns NONE even though the taxon exists, e.g. class Amphibia). Verified
+// by actual occurrence data.
+const _fromCandidate = (candidate, occCount) => ({
+  key: candidate.key,
+  canonical: candidate.canonicalName ?? candidate.scientificName ?? "",
+  authorship: candidate.authorship ?? "",
+  rank: candidate.rank ?? "",
+  status: candidate.taxonomicStatus ?? "ACCEPTED",
+  matchType: "EXACT",
+  confidence: 100,
+  classification: [],
+  iucn: null,
+  occCount,
+});
+
+// GBIF returns matchType NONE when several taxa share a name ("Multiple
+// equal matches") — e.g. the ant genus Solenopsis versus a little-known
+// plant genus, or the genera named Amphibia drowning the class. GBIF's own
+// species search only returns source duplicates without authorship, so
+// resolve through ChecklistBank's cleaner index: it lists each homonym once
+// with its authorship, and "Genus Author, 1840" matches uniquely. Among
+// equal candidates the one with the most occurrences wins — the clade a
+// searcher means.
+const _searchResolve = async (fetchFn, term, ranks) => {
+  const wanted = term.toLowerCase();
+  for (const rank of ranks) {
+    const data = await _fetchJson(
+      fetchFn,
+      `https://api.checklistbank.org/dataset/${CLB_COL_KEY}/nameusage/search` +
+        `?q=${encodeURIComponent(term)}&rank=${rank}&limit=10`,
+    );
+    const rows = (data?.result ?? []).filter((r) => {
+      const usage = r?.usage ?? {};
+      const name = usage.name ?? {};
+      return (
+        String(usage.status ?? "").toLowerCase() === "accepted" &&
+        String(name.scientificName ?? "").toLowerCase() === wanted
+      );
+    });
+    if (rows.length === 0) continue;
+
+    let bestMatch = null;
+    let bestCount = 0;
+    for (const r of rows) {
+      const name = r.usage.name ?? {};
+      // Authorship turns "Solenopsis" (homonym) into "Solenopsis Westwood,
+      // 1840" (unique) — the clean way to an occurrence-linked usage.
+      const fullName = name.authorship
+        ? `${name.scientificName} ${name.authorship}`
+        : name.scientificName;
+      let m = await _match(fetchFn, fullName);
+      if (!m) m = await _match(fetchFn, name.scientificName);
+      const key = m?.key ?? r.id;
+      const occ = await _fetchJson(
+        fetchFn,
+        `${GBIF}/occurrence/search?checklistKey=${COL_KEY}&taxonKey=${key}&limit=0`,
+      );
+      const count = occ?.count ?? 0;
+      if (count > bestCount) {
+        bestCount = count;
+        bestMatch = m
+          ? { ...m, occCount: count }
+          : _fromCandidate(
+              {
+                key: r.id,
+                canonicalName: name.scientificName,
+                authorship: name.authorship ?? "",
+                rank,
+                taxonomicStatus: "ACCEPTED",
+              },
+              count,
+            );
+      }
+    }
+    if (bestMatch) return bestMatch;
+  }
+  return null;
+};
+
+// Vernacular fallback: resolve the common name through the vernacular
+// indexes, then match the resulting scientific name against COL XR for the
+// occurrence-linked usage. Two sources, deduplicated:
+//   - the legacy backbone index (frozen at 2023, but authoritative)
+//   - COL XR's own index (carries current names the frozen backbone lacks;
+//     "snow leopard" → Panthera uncia, not the backbone's Uncia uncia)
+// Candidates are ranked by source consensus — how many independent exact
+// entries agree — not by occurrence volume, which mislabels win ("fin
+// whale" tagged "blue whale" has more records than the blue whale).
+// "gray wolf" matches Canis lupus and C. l. familiaris; "giant panda" the
+// species and its genus — consensus favors the full species.
 const BACKBONE_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
 
-const _vernacularMatch = async (fetchFn, term) => {
+const _vernacularResolve = async (fetchFn, term) => {
   const wanted = term.toLowerCase();
-  const data = await _fetchJson(
+  const byName = new Map();
+  const addHits = (results) => {
+    for (const r of results) {
+      if (!r?.key) continue;
+      for (const v of r.vernacularNames ?? []) {
+        const name = String(v?.vernacularName ?? "");
+        if (!name || name.toLowerCase() !== wanted) continue;
+        const canonical = r.canonicalName || r.scientificName || "";
+        if (!canonical) continue;
+        const e = byName.get(canonical) ?? { canonical, display: name, count: 0, species: false };
+        e.count += 1;
+        if (r.rank === "SPECIES") e.species = true;
+        byName.set(canonical, e);
+        break;
+      }
+    }
+  };
+  const backbone = await _fetchJson(
     fetchFn,
     `${GBIF}/species/search?q=${encodeURIComponent(term)}&qField=VERNACULAR` +
       `&datasetKey=${BACKBONE_KEY}&status=ACCEPTED&limit=20`,
   );
-  const hits = [];
-  for (const r of data?.results ?? []) {
-    if (!r?.key) continue;
-    for (const v of r.vernacularNames ?? []) {
-      const name = (v?.vernacularName ?? "").toLowerCase();
-      if (name && name === wanted) {
-        hits.push({
-          key: r.key,
-          scientificName: r.canonicalName || r.scientificName || "",
-          vernacular: v.vernacularName,
-          rank: r.rank ?? "",
-        });
-        break;
-      }
-    }
+  addHits(backbone?.results ?? []);
+  const col = await _fetchJson(
+    fetchFn,
+    `${GBIF}/species/search?q=${encodeURIComponent(term)}&qField=VERNACULAR` +
+      `&checklistKey=${COL_KEY}&status=ACCEPTED&limit=100`,
+  );
+  addHits(col?.results ?? []);
+  if (byName.size === 0) return null;
+  const entries = [...byName.values()].sort(
+    (a, b) => b.count - a.count || Number(b.species) - Number(a.species),
+  );
+  let fallback = null;
+  for (const e of entries.slice(0, 5)) {
+    const m = await _match(fetchFn, e.canonical);
+    if (!m) continue;
+    // A valid name still needs occurrence data behind it to be worth a card.
+    const occ = await _fetchJson(
+      fetchFn,
+      `${GBIF}/occurrence/search?checklistKey=${COL_KEY}&taxonKey=${m.key}&limit=0`,
+    );
+    if ((occ?.count ?? 0) > 0) return { match: m, vernacular: e.display };
+    if (!fallback) fallback = { match: m, vernacular: e.display };
   }
-  if (hits.length === 0) return null;
-  // "gray wolf" matches both Canis lupus and C. l. familiaris — the full
-  // species is almost always what a searcher means.
-  return hits.find((h) => h.rank === "SPECIES") ?? hits[0];
+  return fallback;
 };
 
 const _render = (data) => template.replace(/\{\{(\w+)\}\}/g, (_, key) => data[key] ?? "");
@@ -250,7 +376,7 @@ export const slot = {
   position: "above-results",
   waitForResults: false,
   description:
-    "When a search query is a species or other taxon name, shows a GBIF card above results with the full classification tree, IUCN status, occurrence stats and a range map.",
+    "When a search query is a species or other taxon name, shows a GBIF card above results with the full classification tree, IUCN status, occurrence stats and a range map. Taxonomy comes from the Catalogue of Life, which GBIF uses as its primary classification.",
 
   settingsSchema: [
     {
@@ -258,13 +384,13 @@ export const slot = {
       label: "Match confidence",
       type: "text",
       placeholder: "90",
-      description: "0–100. Only queries the GBIF backbone matches with at least this confidence show a card.",
+      description: "0–100. Only queries GBIF matches with at least this confidence show a card.",
     },
     {
       key: "skipTerms",
       label: "Hide for bare searches",
       type: "textarea",
-      default: "python, hydra",
+      default: "python, hydra, corona",
       description:
         "Comma-separated words that get no card when searched alone, for names that are usually something else (like the Python programming language). Adding context brings the card back: \"python animal\" or \"hydra species\" still show it.",
     },
@@ -326,83 +452,79 @@ export const slot = {
     const fetchFn = context?.fetch || fetch;
 
     try {
-      const match = await _fetchJson(
-        fetchFn,
-        `${GBIF}/species/match?name=${encodeURIComponent(term)}&strict=false`,
-      );
+      let m = await _match(fetchFn, term);
+      let resolved = false;
 
-      let key = "";
-      let matchCanonical = "";
-      let loose = false;
-      let commonOverride = "";
-
-      if (!match?.synonym && match?.usageKey) {
-        loose = match.matchType !== "EXACT" && match.matchType !== "VERBATIM";
+      if (m) {
+        const loose = m.matchType !== "EXACT" && m.matchType !== "VERBATIM";
         // A HIGHERRANK fallback above genus is a parse failure when (a) the
         // query was reduced by filler stripping ("hydra species"), or (b)
         // the matched taxon is not the query itself ("halcyon" → kingdom
         // Animalia). But an explicitly typed higher taxon ("animalia",
         // "aves", "chordata") is a legitimate card.
-        const highRank = match.matchType === "HIGHERRANK" && match.rank !== "GENUS";
+        const highRank = m.matchType === "HIGHERRANK" && m.rank !== "GENUS";
         const tooCoarse =
           highRank &&
-          (fillerStripped || (match.canonicalName ?? "").toLowerCase() !== term.toLowerCase());
+          (fillerStripped || (m.canonical ?? "").toLowerCase() !== term.toLowerCase());
         const threshold = loose ? Math.max(minConfidence, LOOSE_MIN_CONFIDENCE) : minConfidence;
-        if (!tooCoarse && (match.confidence ?? 0) >= threshold) {
-          key = match.usageKey;
-          matchCanonical = match.canonicalName ?? "";
+        if (!tooCoarse && m.confidence >= threshold) resolved = true;
+      }
+
+      let commonOverride = "";
+
+      if (!resolved) {
+        // Ambiguous or degraded name — resolve to the clade a searcher means.
+        const found = await _searchResolve(fetchFn, term, [
+          "GENUS",
+          "CLASS",
+          "ORDER",
+          "FAMILY",
+          "PHYLUM",
+          "KINGDOM",
+        ]);
+        if (found) {
+          m = found;
+          resolved = true;
         }
       }
 
-      if (!key) {
-        // Ambiguous name (several backbone taxa share it) — resolve to the
-        // largest clade before trying the vernacular index.
-        const resolved = await _disambiguate(fetchFn, term);
-        if (resolved) {
-          key = resolved.key;
-          matchCanonical = resolved.scientificName;
+      if (!resolved) {
+        // Scientific match failed — try the vernacular name index, so
+        // queries like "grizzly bear" still get a card. Only exact
+        // common-name hits count; partial phrases ("grizzly bear
+        // prickly-pear cactus") are ignored.
+        const v = await _vernacularResolve(fetchFn, term);
+        if (v) {
+          m = v.match;
+          commonOverride = v.vernacular;
+          resolved = true;
         }
       }
 
-      if (!key) {
-        // Scientific match failed (or was too fuzzy) — try the vernacular
-        // name index, so queries like "grizzly bear" still get a card.
-        // Only exact common-name hits count; partial phrases ("grizzly
-        // bear prickly-pear cactus") are ignored.
-        const found = await _vernacularMatch(fetchFn, term);
-        if (!found) return { title: "", html: "" };
-        key = found.key;
-        matchCanonical = found.scientificName;
-        commonOverride = found.vernacular;
-      }
+      if (!resolved || !m?.key) return { title: "", html: "" };
 
-      const [record, iucn, occ, photo] = await Promise.all([
-        _fetchJson(fetchFn, `${GBIF}/species/${key}`),
-        _fetchJson(fetchFn, `${GBIF}/species/${key}/iucnRedListCategory`),
+      const occBase =
+        `${GBIF}/occurrence/search?checklistKey=${COL_KEY}&taxonKey=${m.key}`;
+      const [occ, photo, vernacular] = await Promise.all([
         _fetchJson(
           fetchFn,
-          `${GBIF}/occurrence/search?taxonKey=${key}&limit=1&facet=country&facetLimit=4&sortBy=eventDate&sortOrder=DESC`,
+          `${occBase}&limit=1&facet=country&facetLimit=4&sortBy=eventDate&sortOrder=DESC`,
         ),
         showPhoto
-          ? _fetchJson(
-              fetchFn,
-              `${GBIF}/occurrence/search?taxonKey=${key}&mediaType=stillImage&limit=5`,
-            )
+          ? _fetchJson(fetchFn, `${occBase}&mediaType=stillImage&limit=5`)
           : Promise.resolve(null),
+        commonOverride ? Promise.resolve("") : _englishVernacular(fetchFn, m.key),
       ]);
 
-      const usage = record ?? {};
-      const scientific = usage.canonicalName || matchCanonical || usage.scientificName || term;
-      const authorship = usage.authorship ?? "";
-      const common = commonOverride || _commonName(record, match);
-      const clades = [
-        usage.kingdom,
-        usage.phylum,
-        usage.class,
-        usage.order,
-        usage.family,
-        usage.genus,
-      ].filter(Boolean);
+      const scientific = m.canonical || term;
+      const authorship = m.authorship ?? "";
+      const common = commonOverride || vernacular;
+      // Keep the classic six-rank lineage display; COL XR classifies through
+      // many more intermediate ranks (subphylum, gigaclass…).
+      const LINEAGE_RANKS = ["KINGDOM", "PHYLUM", "CLASS", "ORDER", "FAMILY", "GENUS"];
+      const clades = LINEAGE_RANKS.map((r) =>
+        (m.classification ?? []).find((c) => c?.rank === r)?.name,
+      ).filter(Boolean);
 
       const count = occ?.count ?? 0;
       const countries = (occ?.facets?.[0]?.counts ?? [])
@@ -418,11 +540,11 @@ export const slot = {
       const badge = (cls, text) =>
         text ? `<span class="tp-badge tp-badge--${cls}">${_esc(text)}</span>` : "";
 
-      const iucnCode = iucn?.code ?? "";
-      const iucnLabel =
-        IUCN_CATEGORY_LABELS[iucn?.category ?? ""] ?? IUCN_LABELS[iucnCode] ?? iucnCode;
+      const iucnCode = m.iucn?.statusCode ?? "";
+      // "Not Evaluated" carries no information; showing it is just noise.
+      const iucnLabel = iucnCode && iucnCode !== "NE" ? IUCN_LABELS[iucnCode] ?? iucnCode : "";
       const iucnHtml = iucnLabel
-        ? badge(`iucn--${(iucnCode || iucnLabel).toLowerCase()}`, `IUCN · ${iucnLabel}`)
+        ? badge(`iucn--${iucnCode.toLowerCase()}`, `IUCN · ${iucnLabel}`)
         : "";
 
       const mapHtml =
@@ -432,7 +554,9 @@ export const slot = {
               proxied("https://tile.gbif.org/3857/omt/0/0/0@2x.png?style=gbif-classic"),
             )}">` +
             `<img class="tp-map-dots" loading="lazy" alt="GBIF occurrence density map" src="${_esc(
-              proxied(`${GBIF.replace("/v1", "")}/v2/map/occurrence/density/0/0/0@2x.png?taxonKey=${key}`),
+              proxied(
+                `${GBIF_V2}/map/occurrence/density/0/0/0@2x.png?taxonKey=${m.key}&checklistKey=${COL_KEY}`,
+              ),
             )}">` +
             `</div>`
           : "";
@@ -465,8 +589,8 @@ export const slot = {
         (authorship ? ` <span class="tp-authorship">${_esc(authorship)}</span>` : "") +
         `</div>` +
         `<div class="tp-badges">` +
-        badge("rank", _esc((usage.rank ?? match.rank ?? "").toLowerCase())) +
-        badge("status", usage.taxonomicStatus ? _esc(usage.taxonomicStatus.toLowerCase()) : "") +
+        badge("rank", _esc((m.rank ?? "").toLowerCase())) +
+        badge("status", m.status ? _esc(m.status.toLowerCase()) : "") +
         iucnHtml +
         `</div>` +
         lineageHtml +
@@ -474,9 +598,12 @@ export const slot = {
         `</div>` +
         `</div>`;
 
-      const footerHtml = `<a class="tp-link" href="https://www.gbif.org/species/${key}" rel="noopener">Open on GBIF ›</a>`;
+      const footerHtml = `<a class="tp-link" href="https://www.gbif.org/taxon/${m.key}" rel="noopener">Open on GBIF ›</a>`;
 
-      const looseNote = loose ? `<span class="tp-loose">probable match</span> ` : "";
+      const looseNote =
+        m.matchType !== "EXACT" && m.matchType !== "VERBATIM"
+          ? `<span class="tp-loose">probable match</span> `
+          : "";
       const content =
         `<div class="tp-card">${looseNote}${headHtml}${mapHtml}${footerHtml}</div>`;
       return { title: common || scientific, html: _render({ content }) };
