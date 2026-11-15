@@ -574,25 +574,44 @@ export const slot = {
 
       const lineageHtml = (() => {
         // GBIF catalog-style tree: each clade indented a level, rank label
-        // right-aligned, the matched taxon highlighted.
+        // right-aligned, the matched taxon highlighted. Deep chains (a
+        // subspecies has ~19 ranks) fold their middle under a <details> so
+        // the tree stays short and the indentation cannot reach the border.
         const cls = (m.classification ?? []).filter((c) => c?.name);
         if (!cls.length) return "";
-        const rows = cls
-          .map((c, i) => {
-            const current = i === cls.length - 1;
-            const rank = String(c.rank ?? "");
-            const rankLabel = rank
-              ? rank.charAt(0).toUpperCase() + rank.slice(1).toLowerCase()
-              : "";
-            return (
-              `<div class="tp-tree-row${current ? " tp-tree-current" : ""}" style="--tp-depth:${i}">` +
-              `<span class="tp-tree-name">${_esc(c.name)}</span>` +
-              (rankLabel ? `<span class="tp-tree-rank">${_esc(rankLabel)}</span>` : "") +
-              `</div>`
-            );
-          })
-          .join("");
-        return `<div class="tp-tree">${rows}</div>`;
+        const row = (c, i) => {
+          const current = i === cls.length - 1;
+          const rank = String(c.rank ?? "");
+          const rankLabel = rank
+            ? rank.charAt(0).toUpperCase() + rank.slice(1).toLowerCase()
+            : "";
+          return (
+            `<div class="tp-tree-row${current ? " tp-tree-current" : ""}" style="--tp-depth:${i}">` +
+            `<span class="tp-tree-name">${_esc(c.name)}</span>` +
+            (rankLabel ? `<span class="tp-tree-rank">${_esc(rankLabel)}</span>` : "") +
+            `</div>`
+          );
+        };
+        const FOLD_OVER = 9;
+        const TAIL = 4;
+        if (cls.length <= FOLD_OVER) {
+          return `<div class="tp-tree">${cls.map(row).join("")}</div>`;
+        }
+        const mid = cls.slice(2, cls.length - TAIL);
+        const fold =
+          `<details class="tp-tree-fold">` +
+          `<summary class="tp-tree-row" style="--tp-depth:2">` +
+          `<span class="tp-tree-name">⋯ ${mid.length} intermediate ranks</span>` +
+          `</summary>` +
+          mid.map((c, i) => row(c, i + 2)).join("") +
+          `</details>`;
+        return (
+          `<div class="tp-tree">` +
+          cls.slice(0, 2).map((c, i) => row(c, i)).join("") +
+          fold +
+          cls.slice(-TAIL).map((c, i) => row(c, cls.length - TAIL + i)).join("") +
+          `</div>`
+        );
       })();
 
       const headHtml =
