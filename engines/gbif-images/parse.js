@@ -107,8 +107,8 @@ const _nameRelevant = (query, item) => {
   const words = `${item?.genericName ?? item?.genus ?? ""} ${item?.specificEpithet ?? ""} ${item?.family ?? ""} ${item?.order ?? ""} ${item?.class ?? ""} ${item?.kingdom ?? ""} ${item?.vernacularName ?? ""}`
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter(Boolean);
+    .filter((w) => w.length >= 3);
   return tokens.some((t) =>
-    words.some((w) => w.startsWith(t) || (t.length >= 3 && t.startsWith(w))),
+    words.some((w) => w.startsWith(t) || t.startsWith(w)),
   );
 };
