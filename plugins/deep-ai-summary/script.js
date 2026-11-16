@@ -16,6 +16,7 @@
   let sources = [];
   let newTab = false;
   let animations = null;
+  let contextKey = null;
 
   const loadAnimations = () =>
     (animations ??= import(ANIMATIONS_URL).catch(() => {
@@ -227,7 +228,7 @@
       } catch { }
       if (evt === "delta") handlers.onDelta(parsed.text || "");
       else if (evt === "thinking") handlers.onThinking(parsed.text || "");
-      else if (evt === "done") handlers.onDone(parsed.finishReason);
+      else if (evt === "done") handlers.onDone(parsed);
       else if (evt === "error") handlers.onError(parsed.message || "Stream error");
       evt = undefined;
       data = "";
@@ -288,13 +289,13 @@
         thinking.stream.textContent = thinkBuf;
         thinking.stream.scrollTop = thinking.stream.scrollHeight;
       },
-      onDone: () => {
+      onDone: (meta) => {
         clearTransient(target);
         if (!textBuf.trim()) {
           onFail(t("deep-ai-summary-slot.no-response"));
           return;
         }
-        onComplete(textBuf);
+        onComplete(textBuf, meta?.key);
       },
       onError: (msg) => {
         clearTransient(target);
@@ -397,11 +398,12 @@
         target.dataset.state = "streaming";
         target.innerHTML = writingHtml();
       },
-      onComplete: (text) => {
+      onComplete: (text, key) => {
         endTyping();
         streamDone = true;
         target.dataset.state = "done";
         paintRich(target, text);
+        contextKey = key ?? null;
         initFollowUp(box, text);
         requestAnimationFrame(() => {
           needsClamp = !!(bodyEl && bodyEl.scrollHeight > MAX_SUMMARY_HEIGHT);
@@ -475,7 +477,13 @@
 
     await runStream({
       url: CHAT_URL,
-      payload: { messages: history, language: browserLanguage() },
+      payload: {
+        messages: history,
+        query: getQuery(),
+        results: collectResults(),
+        key: contextKey,
+        language: browserLanguage(),
+      },
       target: reply,
       thinkAnchor: reply,
       thinkPos: "before",

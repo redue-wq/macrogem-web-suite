@@ -39,7 +39,7 @@ const pump = async (iter, controller) => {
   return { finishReason, errored, text };
 };
 
-export const runStream = (messages, maxTokens, cacheKey, settings, cache, sessionSeed = "", language = "") => {
+export const runStream = (messages, maxTokens, cacheKey, settings, cache, sessionSeed = "", language = "", doneMeta = {}) => {
   const adapter = pickAdapter(settings.provider, settings.openAICompatProvider);
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), settings.timeoutMs);
@@ -52,7 +52,7 @@ export const runStream = (messages, maxTokens, cacheKey, settings, cache, sessio
           const cached = await cache.get(cacheKey);
           if (cached) {
             writeSse(controller, "delta", { text: cached });
-            writeSse(controller, "done", { finishReason: "cache" });
+            writeSse(controller, "done", { finishReason: "cache", ...doneMeta });
             return;
           }
         }
@@ -104,7 +104,7 @@ export const runStream = (messages, maxTokens, cacheKey, settings, cache, sessio
             console.warn(LOG_NS, "cache set failed", err);
           }
         }
-        writeSse(controller, "done", { finishReason: out.finishReason ?? "stop" });
+        writeSse(controller, "done", { finishReason: out.finishReason ?? "stop", ...doneMeta });
       } catch (err) {
         console.warn(LOG_NS, "stream failed", err);
         try { writeSse(controller, "error", { message: "Stream failed" }); } catch {}

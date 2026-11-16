@@ -20,18 +20,23 @@ const DEEP_AI_SUMMARY_ID = "deep-ai-summary-slot";
 const MODEL_FIELD_KEY = "model";
 const PROVIDER_FIELD_KEY = "provider";
 const SUMMARY_NAMESPACE = "ext:deep-ai-summary:summary";
+const TEXTS_NAMESPACE = "ext:deep-ai-summary:pagetexts";
 const SHORT_TTL_MS = 2 * 60 * 1000;
+// Follow-up chats should see the same page texts the summary saw; keep them
+// longer than the summary itself since users read before asking.
+const TEXTS_TTL_MS = 30 * 60 * 1000;
 const ROUTE_STREAM = "/stream";
 const ROUTE_CHAT = "/chat";
 const ROUTE_ANIMATIONS = "/animations.js";
 
 let _settings = parseSettings({});
 let _summaryCache = null;
+let _textsCache = null;
 let _animationsSource = "";
 
-const resolveCache = (ctx) => {
+const resolveCache = (ctx, namespace, ttl) => {
   if (typeof ctx?.useCache === "function") {
-    return ctx.useCache(SUMMARY_NAMESPACE, SHORT_TTL_MS);
+    return ctx.useCache(namespace, ttl);
   }
   if (typeof ctx?.createCache === "function") {
     const sync = ctx.createCache(SHORT_TTL_MS);
@@ -45,15 +50,43 @@ const resolveCache = (ctx) => {
   return null;
 };
 
-const buildSummaryMsgs = async (query, results) => {
+const fetchSourceTexts = async (results) => {
   const sources = buildSources(results, undefined, _settings.maxSources);
   const fetchN = Math.min(sources.length, _settings.fetchPages);
-  const texts = fetchN > 0
-    ? await extractSources(_settings, sources.slice(0, fetchN).map((s) => s.url))
-    : sources.map(() => null);
+  if (fetchN === 0) return sources.map(() => null);
+  return extractSources(_settings, sources.slice(0, fetchN).map((s) => s.url));
+};
+
+const buildSummaryMsgs = async (query, results) => {
+  const sources = buildSources(results, undefined, _settings.maxSources);
+  const texts = await fetchSourceTexts(results);
+  return {
+    messages: [
+      { role: "system", content: _settings.systemPrompt || DEFAULT_SYSTEM_PROMPT },
+      { role: "user", content: buildFetchedUserPrompt(query, sources, texts) },
+    ],
+    texts,
+  };
+};
+
+// Follow-up chats get the same material the summary saw. The texts fetched
+// for the summary are cached under its cache key; on a miss (expired), they
+// are re-extracted from the results the client echoes back.
+const buildChatContext = async (query, results, key) => {
+  if (!query) return [];
+  let texts = null;
+  if (key && _textsCache) {
+    try {
+      const raw = await _textsCache.get(`texts|${key}`);
+      if (raw) texts = JSON.parse(raw);
+    } catch {
+      // fall through to re-extraction
+    }
+  }
+  if (!texts && results.length > 0) texts = await fetchSourceTexts(results);
+  const sources = buildSources(results, undefined, _settings.maxSources);
   return [
-    { role: "system", content: _settings.systemPrompt || DEFAULT_SYSTEM_PROMPT },
-    { role: "user", content: buildFetchedUserPrompt(query, sources, texts) },
+    { role: ChatRole.System, content: buildFetchedUserPrompt(query, sources, texts) },
   ];
 };
 
@@ -122,7 +155,8 @@ export const slot = {
   isClientExposed: false,
 
   async init(ctx) {
-    _summaryCache = resolveCache(ctx);
+    _summaryCache = resolveCache(ctx, SUMMARY_NAMESPACE, SHORT_TTL_MS);
+    _textsCache = resolveCache(ctx, TEXTS_NAMESPACE, TEXTS_TTL_MS);
     _animationsSource = (await ctx.readFile?.("animations.js")) ?? "";
   },
 
@@ -196,14 +230,24 @@ export const routes = [
       if (!_settings.model) return jsonError("AI summary not configured", 400);
       if (_settings.questionMarkOnly && !query.endsWith("?")) return jsonError("Question-only mode", 403);
       const language = pickLanguage(body.language);
+      const { messages, texts } = await buildSummaryMsgs(query, results);
+      const cacheKey = `${summaryCacheKey(query, results, _settings.maxSources, promptSalt())}${language ? `|${language}` : ""}`;
+      if (_textsCache) {
+        try {
+          await _textsCache.set(`texts|${cacheKey}`, JSON.stringify(texts));
+        } catch {
+          // chat follow-ups will re-extract instead
+        }
+      }
       return runStream(
-        await buildSummaryMsgs(query, results),
+        messages,
         _settings.maxTokens,
-        `${summaryCacheKey(query, results, _settings.maxSources, promptSalt())}${language ? `|${language}` : ""}`,
+        cacheKey,
         _settings,
         _summaryCache,
         query,
         language,
+        { key: cacheKey },
       );
     },
   },
@@ -222,8 +266,12 @@ export const routes = [
         return jsonError("Missing messages", 400);
       }
       if (!_settings.model) return jsonError("AI summary not configured", 400);
+      const query = (body.query ?? "").trim();
+      const results = Array.isArray(body.results) ? body.results : [];
+      const key = typeof body.key === "string" ? body.key : "";
+      const context = await buildChatContext(query, results, key);
       return runStream(
-        messages,
+        [...context, ...messages],
         Math.max(_settings.maxTokens, FOLLOWUP_MIN_TOKENS),
         null,
         _settings,
