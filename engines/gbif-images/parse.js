@@ -95,15 +95,16 @@ const _prettyHost = (item) => {
 
 // For text-search fallbacks (no taxon resolved): drop occurrences whose name
 // only matches through the author abbreviation ("Cat." of Knautia
-// subcanescens Cat.) by requiring a query token to word-hit the genus,
-// epithet or vernacular name.
+// subcanescens Cat.) by requiring a query token to word-hit the taxon's
+// names — including higher ranks, since family-level scientific queries
+// ("Gonyleptidae") match the classification, not the genus or epithet.
 const _nameRelevant = (query, item) => {
   const tokens = String(query || "")
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length >= 3);
   if (tokens.length === 0) return true;
-  const words = `${item?.genericName ?? item?.genus ?? ""} ${item?.specificEpithet ?? ""} ${item?.vernacularName ?? ""}`
+  const words = `${item?.genericName ?? item?.genus ?? ""} ${item?.specificEpithet ?? ""} ${item?.family ?? ""} ${item?.order ?? ""} ${item?.class ?? ""} ${item?.kingdom ?? ""} ${item?.vernacularName ?? ""}`
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
