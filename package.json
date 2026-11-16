@@ -22,6 +22,14 @@
       "description": "When a search query matches a taxon in the Catalogue of Life (GBIF's primary taxonomy), shows a card above results with the full classification tree, IUCN status, occurrence stats and a range map.",
       "version": "2.0.0",
       "minDegoogVersion": "1.1.0"
+    },
+    {
+      "path": "plugins/image-gate",
+      "name": "Image Gate",
+      "description": "Hides AI-slop domains from image results, and routes topic-specific engines (iNaturalist, GBIF, NASA Images...) by embedding the query with a small model in your browser: wildlife engines only show for wildlife searches. Engines without a built-in phrase template need no configuration.",
+      "version": "1.0.0",
+      "type": "command",
+      "minDegoogVersion": "1.1.0"
     }
   ],
   "engines": [
