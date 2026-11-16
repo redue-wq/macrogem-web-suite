@@ -15,9 +15,9 @@ const VENDOR = join(HERE, "vendor");
 // leaves its examples empty gets the union of its engines' templates, so a
 // fresh setup needs no phrase writing at all. Explicit examples always win.
 const NATURE_PHRASES =
-  "a wild animal; an insect or spider; a bird; a plant or tree or flower; a mushroom or fungus; a butterfly or moth; a fish, reptile or amphibian; a species of living organism";
+  "a wild animal; an insect or spider; a bird; a plant or tree or flower; a mushroom or fungus; a butterfly or moth; a fish, reptile or amphibian; a species of living organism; a dog; a cat; a horse; a bear; a fox; a deer; a whale; a shark; a frog; a snake; a lizard; a turtle; an eagle; an owl; a penguin; a parrot; a beetle; a bee; an ant; a dragonfly; a snail; a crab; an octopus; a jellyfish; coral; an oak tree; a rose; a cactus; a fern; moss; algae; a bacterium; wheat and crops; seaweed; a woodlouse or isopod; a grizzly bear; a spiny flower mantis, Pseudocreobotra wahlbergi; a hydra organism; green algae";
 const SPACE_PHRASES =
-  "a planet or moon; a galaxy or nebula; a spacecraft or space mission; a telescope or astronomy; an astronaut or space station";
+  "a planet or moon; a galaxy or nebula; a spacecraft or space mission; a telescope or astronomy; an astronaut or space station; the sun or a star; a black hole; a comet or asteroid; a rocket launch; a satellite; a Mars rover; a solar eclipse or aurora; a supernova; Jupiter, Saturn, Mars or Venus; the Apollo moon landing; a city; a continent; Rome; Hong Kong; Europe";
 const ENGINE_TEMPLATES = {
   "inaturalist": NATURE_PHRASES,
   "gbif": NATURE_PHRASES,
@@ -29,7 +29,7 @@ const DEFAULT_TOPICS = [
   { engines: "NASA Images", phrases: "" },
 ];
 const DEFAULT_OTHER =
-  "a city or country or landmark; a food or dish; a product or vehicle; a painting or artwork or drawing; a video game or fictional character; a person or clothing; a room, building or interior design; a landscape or beach or weather";
+  "a city or country or landmark; a food or dish; a product or vehicle; a painting or artwork or drawing; a video game or fictional character; a person or clothing; a room, building or interior design; a landscape or beach or weather; a car; a smartphone or gadget; a movie or tv show; a celebrity or musician; a sports team or athlete; a name of a person or a politician; furniture; a logo or brand; an anime or cartoon character; a meme; a drink or cocktail; a famous building; a street or neighborhood; a flag or map; jewelry or fashion; a tool or machine; a school or office; best image search engines; linux latest version; how to do something in a programming language; cheese, yogurt, milk or butter; bread, pastry or cake; coffee, tea or a drink; a meal on a plate; a dessert or sweet; meat or seafood dish; a mountain or a plain";
 const DEFAULT_MARGIN = 0.05;
 
 let groups = [];
