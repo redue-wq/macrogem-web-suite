@@ -15,7 +15,7 @@ const VENDOR = join(HERE, "vendor");
 // leaves its examples empty gets the union of its engines' templates, so a
 // fresh setup needs no phrase writing at all. Explicit examples always win.
 const NATURE_PHRASES =
-  "a wild animal; an insect or spider; a bird; a plant or tree or flower; a mushroom or fungus; a butterfly or moth; a fish, reptile or amphibian; a species of living organism; a dog; a cat; a horse; a bear; a fox; a deer; a whale; a shark; a frog; a snake; a lizard; a turtle; an eagle; an owl; a penguin; a parrot; a beetle; a bee; an ant; a dragonfly; a snail; a crab; an octopus; a jellyfish; coral; an oak tree; a rose; a cactus; a fern; moss; algae; a bacterium; wheat and crops; seaweed; a woodlouse or isopod; a grizzly bear; a spiny flower mantis, Pseudocreobotra wahlbergi; a hydra organism; green algae";
+  "a wild animal; an insect or spider; a bird; a plant or tree or flower; a mushroom or fungus; a butterfly or moth; a fish, reptile or amphibian; a species of living organism; a dog; a cat; a horse; a bear; a fox; a deer; a whale; a shark; a frog; a snake; a lizard; a turtle; an eagle; an owl; a penguin; a parrot; a beetle; a bee; an ant; a dragonfly; a snail; a crab; an octopus; a jellyfish; coral; an oak tree; a rose; a cactus; a fern; moss; algae; a bacterium; wheat and crops; seaweed; a woodlouse or isopod; a grizzly bear; a wolf; a spiny flower mantis, Pseudocreobotra wahlbergi; a hydra organism; green algae";
 const SPACE_PHRASES =
   "a planet or moon; a galaxy or nebula; a spacecraft or space mission; a telescope or astronomy; an astronaut or space station; the sun or a star; a black hole; a comet or asteroid; a rocket launch; a satellite; a Mars rover; a solar eclipse or aurora; a supernova; Jupiter, Saturn, Mars or Venus; the Apollo moon landing; a city; a continent; Rome; Hong Kong; Europe";
 const ENGINE_TEMPLATES = {
@@ -180,13 +180,32 @@ export default {
       })
       .filter((x) => x.engines.length && x.phrases.length);
 
+    // Rows whose phrase sets ended up identical (e.g. the settings UI split
+    // one topic across several engine rows) must share a single group: the
+    // margin test compares best vs runner-up, and duplicate groups make the
+    // gap zero, disabling hiding entirely.
+    const merged = [];
+    const byPhrases = new Map();
+    for (const x of topics) {
+      const key = JSON.stringify(x.phrases);
+      const at = byPhrases.get(key);
+      if (at === undefined) {
+        byPhrases.set(key, merged.length);
+        merged.push(x);
+      } else {
+        for (const e of x.engines) {
+          if (!merged[at].engines.includes(e)) merged[at].engines.push(e);
+        }
+      }
+    }
+
     const otherRaw = settings?.otherPhrases || DEFAULT_OTHER;
     const other = String(otherRaw).includes(";") ? split(otherRaw, /[;\n]/) : split(otherRaw, /[,\n]/);
-    groups = topics.map((x, i) => ({ name: `topic${i}`, phrases: x.phrases }));
+    groups = merged.map((x, i) => ({ name: `topic${i}`, phrases: x.phrases }));
     if (other.length) groups.push({ name: "other", phrases: other });
 
     engineGroup = {};
-    topics.forEach((x, i) => {
+    merged.forEach((x, i) => {
       for (const e of x.engines) engineGroup[e.toLowerCase()] = `topic${i}`;
     });
 
