@@ -1,6 +1,6 @@
 # macrogem-web-suite
 
-Microsoft Parody plugins I made for fun and personal use.
+Plugins I made for fun and personal use that started as a parody of Microsoft.
 
 Community plugins and themes for [degoog](https://github.com/degoog-org/degoog) 
 
