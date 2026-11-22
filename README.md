@@ -16,6 +16,30 @@ AI summary panel, forked from the official [AI Summary](https://github.com/degoo
 2. **Custom panel title:** the panel badge text is a setting.
 3. **Max sources:** how many results the summary cites at all.
 
+## Taxonomy Panel — `plugins/taxonomy-panel`
+
+When a query matches a taxon in the Catalogue of Life (GBIF's primary taxonomy), shows a card above the results with the full classification tree, IUCN status, occurrence stats and a range map.
+
+<div align="center">
+    <img width="700" src="./plugins/taxonomy-panel/screenshots/1.webp" />
+</div>
+
+## Marginalia — `engines/marginalia`
+
+Marginalia Search, the indie engine indexing the small, old and text-heavy web.
+
+<div align="center">
+    <img width="700" src="./engines/marginalia/screenshots/1.webp" />
+</div>
+
+## GBIF — `engines/gbif-images`
+
+Photos of life on Earth from the Global Biodiversity Information Facility: field observations, herbarium sheets, museum specimens and fossils, through the official GBIF API. No key needed.
+
+<div align="center">
+    <img width="400" src="./engines/gbif-images/screenshots/1.webp" />
+</div>
+
 ## Bong — `themes/bong`
 
 - Bong theme.
